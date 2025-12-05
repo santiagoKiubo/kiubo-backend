@@ -1,21 +1,28 @@
 const OpenAI = require("openai");
 
-const client = new OpenAI({
-  apiKey: process.env.OPENAI_API_KEY,
-});
-
+// Read env vars FIRST
+const API_KEY = process.env.OPENAI_API_KEY;
 const ASSISTANT_ID = process.env.OPENAI_ASSISTANT_ID;
 
-console.log("🔑 API key present:", !!process.env.OPENAI_API_KEY);
-console.log("🤖 Assistant ID:", ASSISTANT_ID ? ASSISTANT_ID.slice(0, 8) + "..." : null);
+// Debug logs – this will show up in Railway logs
+console.log("🔑 OPENAI_API_KEY present?", !!API_KEY);
+console.log(
+  "🤖 OPENAI_ASSISTANT_ID:",
+  ASSISTANT_ID ? ASSISTANT_ID.slice(0, 8) + "..." : null
+);
 
+// Only create the client if we actually have a key
+let client = null;
+if (API_KEY) {
+  client = new OpenAI({ apiKey: API_KEY });
+}
 
 async function sendMessageToAssistant(userMessage) {
   try {
-    if (!process.env.OPENAI_API_KEY) {
-  console.error("❌ Missing OPENAI_API_KEY env var");
-  return "Lo siento, hubo un error procesando tu mensaje.";
-}
+    if (!API_KEY) {
+      console.error("❌ Missing OPENAI_API_KEY env var");
+      return "Lo siento, hubo un error procesando tu mensaje.";
+    }
 
     if (!ASSISTANT_ID) {
       console.error("❌ Missing OPENAI_ASSISTANT_ID env var");
@@ -42,12 +49,20 @@ async function sendMessageToAssistant(userMessage) {
     console.log("🏃 Run ID:", run.id);
 
     // 3) Poll the run status until it finishes
-    let runStatus = await client.beta.threads.runs.retrieve(thread.id, run.id);
+    let runStatus = await client.beta.threads.runs.retrieve(run.id, {
+      thread_id: thread.id,
+    });
+
     console.log("🔄 Initial run status:", runStatus.status);
 
-    while (runStatus.status === "queued" || runStatus.status === "in_progress") {
+    while (
+      runStatus.status === "queued" ||
+      runStatus.status === "in_progress"
+    ) {
       await new Promise((resolve) => setTimeout(resolve, 1000));
-      runStatus = await client.beta.threads.runs.retrieve(thread.id, run.id);
+      runStatus = await client.beta.threads.runs.retrieve(run.id, {
+        thread_id: thread.id,
+      });
       console.log("🔄 Polled run status:", runStatus.status);
     }
 
@@ -91,10 +106,7 @@ async function sendMessageToAssistant(userMessage) {
 
     return text;
   } catch (err) {
-    console.error(
-      "❌ OpenAI Error:",
-      err?.response?.data || err?.message || err
-    );
+    console.error("❌ OpenAI Error:", err.response?.data || err);
     return "Lo siento, hubo un error procesando tu mensaje.";
   }
 }
